@@ -1,0 +1,255 @@
+{
+  "name": "e-commerce_daily_summary_workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b35d5ec8-9098-4bcc-b312-31c2c4e0d36f",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH asof AS (\n  SELECT MAX(order_date)::date AS as_of_date\n  FROM dw_supply_chain_clean\n),\nd AS (\n  SELECT\n    (as_of_date - INTERVAL '1 day')::date AS yday,\n    (as_of_date - INTERVAL '2 day')::date AS day_before\n  FROM asof\n),\nyday_data AS (\n  SELECT *\n  FROM dw_supply_chain_clean s\n  JOIN d ON s.order_date::date = d.yday\n),\nprev_data AS (\n  SELECT *\n  FROM dw_supply_chain_clean s\n  JOIN d ON s.order_date::date = d.day_before\n)\nSELECT\n  (SELECT yday FROM d) AS report_date,\n\n  ROUND(COALESCE(SUM(sales), 0), 2) AS total_sales,\n  ROUND(COALESCE(SUM(order_profit), 0), 2) AS total_profit,\n\n  ROUND(\n    COALESCE(SUM(order_profit),0)\n    / NULLIF(COALESCE(SUM(order_total),0),0) * 100\n  , 2) AS profit_margin_pct,\n\n  ROUND(AVG(CASE WHEN late_delivery_risk = 1 THEN 1 ELSE 0 END) * 100, 2) AS late_delivery_pct,\n\n  COUNT(*) FILTER (WHERE late_delivery_risk = 1) AS high_risk_orders,\n\n  ROUND(\n    (\n      (SELECT COUNT(*) FROM yday_data WHERE late_delivery_risk = 1)\n      -\n      (SELECT COUNT(*) FROM prev_data WHERE late_delivery_risk = 1)\n    ) * 100.0\n    / NULLIF((SELECT COUNT(*) FROM prev_data WHERE late_delivery_risk = 1),0)\n  ,2) AS late_orders_change_pct\nFROM yday_data;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "88b36165-6b39-4868-8d13-377b68491609",
+      "name": "KPI_Summary_Static",
+      "credentials": {
+        "postgres": {
+          "id": "BGDbKd9LVeZTG36V",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH asof AS (\n  SELECT MAX(order_date)::date AS as_of_date\n  FROM dw_supply_chain_clean\n),\nd AS (\n  SELECT (as_of_date - INTERVAL '1 day')::date AS yday\n  FROM asof\n)\nSELECT\n  product_name,\n  ROUND(SUM(sales), 2) AS total_sales\nFROM dw_supply_chain_clean s\nJOIN d ON s.order_date::date = d.yday\nGROUP BY product_name\nORDER BY total_sales DESC\nLIMIT 5;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        416,
+        0
+      ],
+      "id": "59a6e3f6-67e2-47c6-85f2-fa09b048432b",
+      "name": "Top5_Products_Static",
+      "credentials": {
+        "postgres": {
+          "id": "BGDbKd9LVeZTG36V",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH asof AS (\n  SELECT MAX(access_day)::date AS as_of_date\n  FROM dw_access_logs_clean\n),\nd AS (\n  SELECT (as_of_date - INTERVAL '1 day')::date AS yday\n  FROM asof\n)\nSELECT\n  (SELECT yday FROM d) AS report_date,\n  COALESCE(SUM(total_views), 0) AS total_views,\n  COALESCE(SUM(unique_visitors), 0) AS unique_visitors\nFROM dw_access_logs_clean a\nJOIN d ON a.access_day::date = d.yday;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        624,
+        0
+      ],
+      "id": "58ef921a-5925-40b2-ab35-45d812dc79bd",
+      "name": "Traffic_Static",
+      "credentials": {
+        "postgres": {
+          "id": "BGDbKd9LVeZTG36V",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const kpi = $items(\"KPI_Summary_Static\")[0].json;\nconst views = $items(\"Traffic_Static\")[0].json;\nconst topProducts = $items(\"Top5_Products_Static\").map(i => i.json);\n\nreturn [{\n  json: {\n    report_date: kpi.report_date,\n    total_sales: kpi.total_sales,\n    total_profit: kpi.total_profit,\n    profit_margin_pct: kpi.profit_margin_pct,\n    late_delivery_pct: kpi.late_delivery_pct,\n    high_risk_orders: kpi.high_risk_orders,\n    late_orders_change_pct: kpi.late_orders_change_pct,\n    total_views: views.total_views,\n    top_products: topProducts\n  }\n}];;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "473413cd-25d9-45f1-9003-fd297456f315",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here are business KPIs:\n\n{{ JSON.stringify($json) }}\n\nTasks:\n1) Write DAILY SUMMARY (max 140 words).\n2) Highlight key risks.\n3) Suggest 3 actions.\n4) If late_delivery_pct > 15%, call it operational risk.\n5) If late_orders_change_pct > 10%, mention increase trend.\n\nFormat:\n\nDAILY SUMMARY:\n...\n\nRISKS:\n- ...\n- ...\n\nACTIONS:\n1) ...\n2) ...\n3) ...",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "f2c3b906-d487-4b20-a9e0-71f2eb7210bd",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4.1-nano",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        912,
+        208
+      ],
+      "id": "0feee632-3322-4fcc-99f3-46c870437ab5",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "JMwG3bMxUcjTeM7T",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "yashmansingh81@gmail.com, shobhith.models@gmail.com, udaysatone3@gmail.com, saikat030703@gmail.com",
+        "subject": "Business Report",
+        "emailType": "text",
+        "message": "=📊 Daily Business Report – {{ $('Code in JavaScript').item.json.report_date }}\n{{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1392,
+        0
+      ],
+      "id": "c2912db1-0be9-453c-8958-01b21856ff79",
+      "name": "Send a message",
+      "webhookId": "435bf69b-e5ff-48f8-8224-92d81cc9f187",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "2E5Ow14aOdGxSGXb",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "KPI_Summary_Static",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KPI_Summary_Static": {
+      "main": [
+        [
+          {
+            "node": "Top5_Products_Static",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Top5_Products_Static": {
+      "main": [
+        [
+          {
+            "node": "Traffic_Static",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traffic_Static": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "Asia/Kolkata",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "f5d04c9f-f6c5-4cce-8585-802ca11cc9ab",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "842811070a1218aa53425a99487c1725e92c1f4b6f560b43571fd08b44b70a56"
+  },
+  "id": "ouU8tM2ltrY8tJv4LrRSK",
+  "tags": []
+}

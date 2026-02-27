@@ -1,0 +1,251 @@
+{
+  "name": "Supply_Chain_Risk_Alert_Static",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        -96
+      ],
+      "id": "6e0473f9-f866-43a2-ac19-772dcd1de0db",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH asof AS (\n  SELECT MAX(order_date)::date AS as_of_date\n  FROM dw_supply_chain_clean\n),\nd AS (\n  SELECT\n    (as_of_date - INTERVAL '1 day')::date AS yday,\n    (as_of_date - INTERVAL '2 day')::date AS day_before\n  FROM asof\n),\nyday AS (\n  SELECT *\n  FROM dw_supply_chain_clean s\n  JOIN d ON s.order_date::date = d.yday\n),\nprev AS (\n  SELECT *\n  FROM dw_supply_chain_clean s\n  JOIN d ON s.order_date::date = d.day_before\n)\nSELECT\n  (SELECT yday FROM d) AS report_date,\n\n  (SELECT COUNT(*) FROM yday WHERE late_delivery_risk = 1) AS late_orders_today,\n  (SELECT COUNT(*) FROM prev WHERE late_delivery_risk = 1) AS late_orders_prev,\n\n  ROUND((SELECT AVG(shipping_delay) FROM yday), 2) AS avg_shipping_delay_today,\n\n  (SELECT COUNT(*) FROM yday\n   WHERE shipping_mode = 'Same Day'\n     AND delay_flag = 'Late') AS same_day_late_today,\n\n  ROUND(\n    (\n      (SELECT COUNT(*) FROM yday WHERE late_delivery_risk = 1)\n      -\n      (SELECT COUNT(*) FROM prev WHERE late_delivery_risk = 1)\n    ) * 100.0\n    / NULLIF((SELECT COUNT(*) FROM prev WHERE late_delivery_risk = 1),0)\n  ,2) AS late_orders_change_pct;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        -96
+      ],
+      "id": "0d65fbba-c11a-4fd2-b0c3-c1aabe6a2f1a",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "BGDbKd9LVeZTG36V",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "349f46f9-a33a-4c16-91cf-336b110e4281",
+              "leftValue": "={{ $json.late_orders_today }}",
+              "rightValue": "={{ $json.late_orders_prev }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "e8537eba-d17b-4e0c-b4da-32f4214a96af",
+              "leftValue": "={{ $json.avg_shipping_delay_today }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "6020e53a-56d6-463d-9541-bf0344ef349c",
+              "leftValue": "={{ $json.same_day_late_today }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        -96
+      ],
+      "id": "dbcc64d5-5509-4bd4-ae4f-207139f22d42",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a supply chain risk analyst.\n\nMetrics:\n{{ JSON.stringify($json) }}\n\nWrite:\n⚠️ Supply Chain Alert\nExplain what changed.\nExplain likely cause.\nSuggest 3 immediate actions.\nKeep under 120 words.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        896,
+        -96
+      ],
+      "id": "ffec87c2-ac03-4b9c-b412-94849b07f6be",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\n\n// helper: convert to number safely\nconst toNum = (v) => {\n  if (v === null || v === undefined || v === '') return null;\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\nreturn [{\n  json: {\n    ...row,\n    late_orders_today: toNum(row.late_orders_today),\n    late_orders_prev: toNum(row.late_orders_prev),\n    avg_shipping_delay_today: toNum(row.avg_shipping_delay_today),\n    same_day_late_today: toNum(row.same_day_late_today),\n    late_orders_change_pct: toNum(row.late_orders_change_pct),\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -96
+      ],
+      "id": "38d24dcf-999e-4c13-8acf-2308acd010e5",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4.1-nano",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        976,
+        128
+      ],
+      "id": "a6ca353c-12d8-49fa-9650-eb91fdcc20cc",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "JMwG3bMxUcjTeM7T",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "shobhith.models@gmail.com, yashmansingh628@gmail.com, saikat030703@gmail.com, udaysatone3@gmail.com",
+        "subject": "Supply Chain Alert",
+        "emailType": "text",
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1248,
+        -96
+      ],
+      "id": "585138c4-0932-421c-b232-bf5e02234fe5",
+      "name": "Send a message",
+      "webhookId": "d33b8b77-9b32-459c-8de8-453cf6a092cf",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "2E5Ow14aOdGxSGXb",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "9328337d-2e50-4077-9c9a-659655fee23a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "842811070a1218aa53425a99487c1725e92c1f4b6f560b43571fd08b44b70a56"
+  },
+  "id": "18Z-9szOf3AN1g6w0ypoS",
+  "tags": []
+}
