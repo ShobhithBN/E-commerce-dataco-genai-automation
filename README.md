@@ -1,215 +1,125 @@
-# 🚀 DataCo GenAI Automation
-## AI-Powered Business Summary & Supply Chain Risk Alert System
+# Data Analyst Project (Week 2 and Week 3)
 
----
+This README documents only Week 2 and Week 3 deliverables from `DA_final_doc.docx`.
 
-## 📌 Project Overview
+## Week 2
 
-This project builds an intelligent automation system using:
+### Unraveling the Narrative of Supply Chain Excellence and Digital Footprints
 
-- **PostgreSQL** (SQL-based ETL & KPI queries)
-- **n8n** (workflow automation)
-- **GenAI (OpenRouter Chat Model)** for reasoning & summarization
-- **Gmail / Slack APIs** for automated communication
+**Focus:** SQL ETL, Excel EDA, and advanced analytics.
 
-The system converts structured business data into:
+### Week 2 Objectives
 
-- 📊 Daily executive summaries  
-- ⚠️ Automated supply chain risk alerts  
-- 📈 Actionable business recommendations  
+- Build analysis-ready daily metrics from supply-chain and access-log data.
+- Measure commercial performance and delivery risk trends.
+- Create Excel-based analytical outputs and dashboard views.
 
-This project demonstrates the integration of **data engineering, automation, and AI-driven decision support**.
+### Datasets Used
 
----
+- Source datasets (as listed in final doc):
+- `DataCoSupplyChainDataset.csv`
+- `TokenizedAccessLogs.csv`
+- Cleaned/processed files in this repo:
+- [dw_supply_chain_clean.csv](Daraset/dw_supply_chain_clean.csv)
+- [dw_access_logs_clean.csv](Daraset/dw_access_logs_clean.csv)
 
-# 🧩 Business Problem
+### SQL Analytics Implemented
 
-## Problem 1 – Leadership Does Not Open Dashboards Daily
+Using [n8n_workflow_querries.sql](n8n%20workflow/n8n_workflow_querries.sql), Week 2 analysis covers:
 
-Executives require:
-- Automated daily insights  
-- Plain-English explanations  
-- Early risk detection  
-- Recommended actions  
+- Daily KPI summary using dynamic reporting date logic (`MAX(order_date) - 1 day`).
+- Day-over-day comparison against `MAX(order_date) - 2 day`.
+- Top 5 products by sales (daily).
+- Website traffic summary from access logs.
 
-## Problem 2 – Supply Chain Risk Needs Immediate Alerts
+### Key Metrics Generated
 
-Operations teams must be notified when:
-- Late deliveries increase  
-- Shipping delays exceed scheduled timelines  
-- Same-Day shipments fail  
+- `total_sales`
+- `total_profit`
+- `profit_margin_pct`
+- `late_delivery_pct`
+- `high_risk_orders`
+- `late_orders_change_pct`
+- `total_views`
+- `unique_visitors` (query output)
 
----
+### Week 2 Deliverables
 
-# 🏗️ System Architecture
+- SQL query file: [n8n_workflow_querries.sql](n8n%20workflow/n8n_workflow_querries.sql)
+- Excel analysis file: [Excel20Question_with_inshits_final.xlsx](Excel20Question_with_inshits_final.xlsx)
+- Excel dashboard file: [DAProjectExcel_UsingSQL_dashboard (1).xlsx](DAProjectExcel_UsingSQL_dashboard%20(1).xlsx)
 
-## 1️⃣ Daily AI Business Summary Workflow
+### Week 2 Screenshot
 
-**Workflow Name:** `Daily_AI_Business_Summary_Static`
+![Week 2 Screenshot](assets/screenshots/week2_screenshot_1.png)
 
-### Workflow Steps
+## Week 3
 
-1. Schedule Trigger (Daily 9:00 AM)
-2. KPI SQL Query
-3. Top 5 Products Query
-4. Website Traffic Query
-5. Code Node (Merge JSON)
-6. AI Agent (Generate Business Summary)
-7. Gmail Notification
+### Power BI Dashboarding, GenAI, and n8n Automation
 
+### Week 3 Objectives
 
-## 2️⃣ Supply Chain Risk Alert Workflow
+- Convert KPI outputs into BI dashboard visuals.
+- Automate daily business summary generation.
+- Trigger and send supply-chain risk alerts when thresholds are crossed.
 
-**Workflow Name:** `Supply_Chain_Risk_Alert_Static`
+### Power BI Deliverable
 
-### Workflow Steps
+- Dashboard file: [DA_e-comerce_dashboard.pbix](DA_e-comerce_dashboard.pbix)
 
-1. Schedule Trigger (Every 2 Hours)
-2. Risk SQL Query
-3. IF Condition (Check Risk Thresholds)
-4. AI Agent (Generate Alert Explanation)
-5. Slack / Email Notification
+### n8n Workflow 1: Daily AI Business Summary
 
-### Workflow Diagram
-Schedule Trigger
-↓
-Risk SQL Query
-↓
-IF (Risk Detected?)
-↓
-AI Agent
-↓
-Slack / Email Alert
+- Workflow file: [e-commerce_daily_summary_workflow.json](n8n%20workflow/e-commerce_daily_summary_workflow.json)
+- Schedule: daily at 9 AM (workflow trigger setting).
+- Main nodes:
+- `Schedule Trigger`
+- `KPI_Summary_Static` (Postgres)
+- `Top5_Products_Static` (Postgres)
+- `Traffic_Static` (Postgres)
+- `Code in JavaScript` (merges query outputs)
+- `AI Agent` + `OpenRouter Chat Model`
+- `Send a message` (Gmail)
+- Prompt constraints:
+- summary max 140 words
+- highlight risks
+- provide 3 actions
+- flag operational risk if `late_delivery_pct > 15`
+- mention trend if `late_orders_change_pct > 10`
 
----
+### n8n Workflow 2: Supply Chain Risk Alert
 
-# 📊 Data Handling Logic
+- Workflow file: [Supply_Chain_Risk_Alert_Static.json](n8n%20workflow/Supply_Chain_Risk_Alert_Static.json)
+- Schedule: every 2 hours.
+- Main nodes:
+- `Schedule Trigger`
+- `Execute a SQL query` (risk headline metrics)
+- `Code in JavaScript` (safe numeric conversion)
+- `If` (OR-based risk trigger)
+- `AI Agent` + `OpenRouter Chat Model`
+- `Send a message` (Gmail)
+- IF conditions (OR logic):
+- `late_orders_today > late_orders_prev`
+- `avg_shipping_delay_today > 0`
+- `same_day_late_today > 0`
+- AI output constraint: alert message under 120 words with causes and 3 immediate actions.
 
-The dataset used is historical (static).  
+### Week 3 Screenshots
 
-To simulate real-time reporting:
+Power BI:
 
-- The system calculates `MAX(order_date)`
-- Treats `(max_date - 1 day)` as “Yesterday”
-- Compares with `(max_date - 2 days)` for trend analysis
+![Week 3 Power BI Screenshot 1](assets/screenshots/week3_powerbi_screenshot_1.png)
+![Week 3 Power BI Screenshot 2](assets/screenshots/week3_powerbi_screenshot_2.png)
 
-This allows the automation to behave like a live production system.
+n8n:
 
----
+![Week 3 n8n Screenshot 1](assets/screenshots/week3_n8n_screenshot_1.png)
+![Week 3 n8n Screenshot 2](assets/screenshots/week3_n8n_screenshot_2.png)
 
-# 📈 KPIs Used
+## Tools and Stack Used in Week 2 and Week 3
 
-## Supply Chain KPIs
-
-- Total Sales
-- Total Profit
-- Profit Margin %
-- Late Delivery %
-- High Risk Orders
-- Shipping Delay
-- Top 5 Products
-
-## Digital Engagement KPIs
-
-- Total Website Views
-- Unique Visitors
-
----
-
-# 🤖 GenAI Integration
-
-GenAI is used for:
-
-- Business reasoning
-- Risk interpretation
-- Executive summarization
-- Action recommendation
-
-### AI Input
-
-Structured JSON generated from SQL queries.
-
-### AI Output
-
-- Daily summary (≤140 words)
-- Risk highlights
-- 3 recommended actions
-- Operational alert explanations
-
----
-
-# 📄 Example AI Output
-
-## Daily Summary
-
-> Yesterday’s total sales reached ₹12.4M with an 18% profit margin.  
-> Late deliveries increased to 21%, indicating operational pressure in shipping.
-
-## Risks
-
-- Rising late deliveries  
-- Increasing Same-Day shipment delays  
-
-## Recommended Actions
-
-1. Review courier capacity  
-2. Prioritize high-margin dispatch  
-3. Audit Same-Day logistics workflow  
-
----
-
-# 🛠️ Tech Stack
-
-- PostgreSQL
-- n8n
-- OpenRouter Chat Model (GenAI)
-- JavaScript (n8n Code Node)
-- Gmail API
-- Slack API
-
----
-
-# 📈 Business Impact
-
-## For Leadership
-- No manual dashboard dependency
-- Automated executive insights
-- Clear, concise business communication
-
-## For Operations
-- Early detection of shipping issues
-- Proactive intervention capability
-- Reduced operational risk exposure
-
----
-
-# 🎯 Skills Demonstrated
-
-- SQL-based ETL & aggregation
-- Business KPI modeling
-- Workflow automation (n8n)
-- AI prompt engineering
-- Risk detection systems
-- Executive-level insight generation
-
----
-
-# 🚀 Future Enhancements
-
-- Add anomaly detection thresholds
-- Integrate predictive delay modeling
-- Add region-wise performance monitoring
-- Deploy with live streaming data
-- Integrate with BI tools
-
----
-
-# 🏁 Conclusion
-
-This project demonstrates how structured business data combined with GenAI can:
-
-- Automate executive reporting  
-- Detect operational risks  
-- Translate raw KPIs into strategic insights  
-
-It integrates **data engineering, automation, and AI-driven decision intelligence** into a real-world business solution.
+- PostgreSQL (querying and KPI extraction)
+- Excel (EDA and dashboarding)
+- Power BI (visual dashboard)
+- n8n (automation orchestration)
+- OpenRouter LLM integration via n8n AI Agent
+- Gmail node for automated notifications
